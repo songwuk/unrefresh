@@ -12,7 +12,11 @@
     "url": "git+https://github.com/songwuk/unrefresh.git"
   },
   "bugs": "https://github.com/songwuk/unrefresh/issues",
-  "keywords": [],
+  "keywords": [
+    "refresh",
+    "pull-to-refresh",
+    "scrollTo"
+  ],
   "sideEffects": false,
   "exports": {
     ".": {
