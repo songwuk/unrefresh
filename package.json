@@ -1,9 +1,9 @@
 {
   "name": "unrefresh",
   "type": "module",
-  "version": "0.0.0-alpha.1",
-  "packageManager": "pnpm@7.12.0",
-  "description": "",
+  "version": "1.0.0",
+  "packageManager": "npm@11.6.2",
+  "description": "A lightweight pull-to-refresh plugin for mobile web pages.",
   "author": "Song wuk <1017301325@qq.com>",
   "license": "MIT",
   "homepage": "https://github.com/songwuk/unrefresh#readme",
@@ -13,19 +13,44 @@
   },
   "bugs": "https://github.com/songwuk/unrefresh/issues",
   "keywords": [
+    "mobile",
+    "plugin",
     "refresh",
     "pull-to-refresh",
     "scrollTo"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "require": "./dist/index.cjs",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./vanilla": {
+      "types": "./dist/vanilla.d.ts",
+      "import": "./dist/vanilla.mjs",
+      "require": "./dist/vanilla.cjs"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.ts",
+      "import": "./dist/vue.mjs",
+      "require": "./dist/vue.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.mjs",
+      "require": "./dist/react.cjs"
     },
     "./css": {
       "default": "./dist/css/container.css"
+    },
+    "./assets/logo.gif": {
+      "default": "./assets/unrefresh-logo.gif"
+    },
+    "./assets/logo.svg": {
+      "default": "./assets/unrefresh-logo.svg"
     }
   },
   "main": "./dist/index.mjs",
@@ -40,6 +65,7 @@
     }
   },
   "files": [
+    "assets",
     "dist"
   ],
   "scripts": {
@@ -47,31 +73,38 @@
     "dev": "unbuild --stub",
     "play": "vite playground",
     "lint": "eslint .",
-    "prepublishOnly": "nr build",
+    "prepublishOnly": "npm run build",
     "release": "bumpp && npm publish",
     "start": "esno src/index.ts",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "vue": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.27.0",
-    "@antfu/ni": "^0.18.0",
-    "@antfu/utils": "^0.5.2",
+    "@eslint/js": "^10.0.1",
     "@rollup/plugin-image": "^2.1.1",
     "@types/node": "^18.7.18",
+    "@types/react": "^19.2.14",
     "bumpp": "^8.2.1",
-    "eslint": "^8.23.1",
+    "eslint": "^10.3.0",
     "esno": "^0.16.3",
-    "pnpm": "^7.12.0",
-    "rimraf": "^3.0.2",
-    "rollup-plugin-css-porter": "^1.0.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
     "typescript": "^4.8.3",
+    "typescript-eslint": "^8.59.3",
     "unbuild": "^0.8.11",
     "vite": "^3.1.2",
     "vitest": "^0.23.4"
-  },
-  "dependencies": {
-    "postcss": "^8.4.17",
-    "rollup-plugin-postcss": "^4.0.2"
   }
 }

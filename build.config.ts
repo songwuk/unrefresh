@@ -1,8 +1,12 @@
-import { defineBuildConfig } from 'unbuild'
 import image from '@rollup/plugin-image'
+import { defineBuildConfig } from 'unbuild'
+
 export default defineBuildConfig({
   entries: [
     'src/index',
+    'src/vanilla',
+    'src/vue',
+    'src/react',
     {
       builder: 'mkdist',
       input: './src/css',
@@ -12,10 +16,12 @@ export default defineBuildConfig({
   declaration: true,
   hooks: {
     'rollup:options': function (_ctx, options) {
-      options && options?.plugins!.push(
-        // rollup plugin...
-        image(),
-      )
+      const outputs = Array.isArray(options.output) ? options.output : [options.output]
+      outputs.forEach((output) => {
+        if (output?.format === 'cjs')
+          output.exports = 'named'
+      })
+      options.plugins?.push(image())
     },
   },
   clean: true,

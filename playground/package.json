@@ -1,8 +1,8 @@
 {
   "name": "playground",
-  "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "version": "0.0.0",
+  "private": true,
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -11,8 +11,5 @@
   "devDependencies": {
     "typescript": "^4.6.4",
     "vite": "^3.1.0"
-  },
-  "dependencies": {
-    "unrefresh": "workspace:*"
   }
 }

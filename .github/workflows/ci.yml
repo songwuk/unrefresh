@@ -15,46 +15,34 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-
       - name: Set node
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
-          cache: pnpm
-
-      - name: Setup
-        run: npm i -g @antfu/ni
+          cache: npm
 
       - name: Install
-        run: nci
+        run: npm ci
 
       - name: Lint
-        run: nr lint
+        run: npm run lint
 
   typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-
       - name: Set node
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
-          cache: pnpm
-
-      - name: Setup
-        run: npm i -g @antfu/ni
+          cache: npm
 
       - name: Install
-        run: nci
+        run: npm ci
 
       - name: Typecheck
-        run: nr typecheck
+        run: npm run typecheck
 
   test:
     runs-on: ${{ matrix.os }}
@@ -68,23 +56,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-
       - name: Set node ${{ matrix.node }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
-
-      - name: Setup
-        run: npm i -g @antfu/ni
+          cache: npm
 
       - name: Install
-        run: nci
+        run: npm ci
 
       - name: Build
-        run: nr build
+        run: npm run build
 
       - name: Test
-        run: nr test
+        run: npm test -- --run
