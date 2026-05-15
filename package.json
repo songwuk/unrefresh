@@ -1,7 +1,7 @@
 {
   "name": "unrefresh",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "packageManager": "npm@11.6.2",
   "description": "A lightweight pull-to-refresh plugin for mobile web pages.",
   "author": "Song wuk <1017301325@qq.com>",
@@ -56,6 +56,9 @@
     },
     "./assets/logo.svg": {
       "default": "./assets/unrefresh-logo.svg"
+    },
+    "./package.json": {
+      "default": "./package.json"
     }
   },
   "main": "./dist/index.mjs",
@@ -71,11 +74,17 @@
   },
   "files": [
     "assets",
+    "CHANGELOG.md",
     "dist",
     "README.zh-CN.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "unbuild",
+    "check": "npm run lint && npm run typecheck && npm test -- --run && npm run build && npm --prefix playground run build",
     "dev": "unbuild --stub",
     "play": "vite playground",
     "lint": "eslint .",

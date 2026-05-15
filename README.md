@@ -37,6 +37,8 @@ import 'unrefresh/css'
 const refresh = createRefresh({
   target: document,
   pullDownLength: 96,
+  animation: 'magnetic',
+  animationDuration: 720,
   bounce: true,
   completeDuration: 460,
   haptics: true,
@@ -85,7 +87,12 @@ import 'unrefresh/css'
 
 const feed = createRefreshResource({
   auto: true,
+  cache: {
+    key: 'feed',
+    ttl: 5 * 60_000,
+  },
   skeleton: {
+    animation: 'shimmer',
     count: 6,
     variant: 'feed-card',
     when: 'empty',
@@ -104,11 +111,14 @@ const feed = createRefreshResource({
   },
   onChange(state) {
     if (state.showSkeleton)
-      renderSkeleton(state.skeletonCount, state.skeletonVariant)
+      renderSkeleton(state.skeletonCount, state.skeletonVariant, state.skeletonAnimation)
     else if (state.status === 'error')
       renderError(state.error)
     else if (state.data)
       renderFeed(state.data)
+
+    if (state.isCached)
+      showCachedBadge()
   },
   onLoadSuccess(data) {
     console.log('Loaded items:', data.length)
@@ -117,7 +127,19 @@ const feed = createRefreshResource({
 
 feed.reload({ force: true })
 feed.cancel()
+feed.clearCache()
 feed.markStale()
+feed.setOptions({
+  animation: 'magnetic',
+  animationDuration: 640,
+  pullDownLength: 112,
+  skeleton: {
+    animation: 'wave',
+    count: 4,
+    variant: 'feed-card',
+    when: 'empty',
+  },
+})
 feed.controller.disable()
 feed.controller.enable()
 ```
@@ -197,8 +219,8 @@ export function Feed() {
   const pageRef = useRef<HTMLElement | null>(null)
 
   useRefresh(pageRef, {
-    async onRefresh() {
-      await reloadFeed()
+    async onRefresh({ signal }) {
+      await reloadFeed(signal)
     },
   }, [])
 
@@ -206,10 +228,39 @@ export function Feed() {
 }
 ```
 
+For teams that prefer object-style hook configuration:
+
+```tsx
+import { useRefreshController } from 'unrefresh/react'
+
+const refreshRef = useRefreshController({
+  target: pageRef,
+  options: {
+    async onRefresh({ signal }) {
+      await reloadFeed(signal)
+    },
+  },
+  deps: [],
+})
+```
+
+## Vue Injection
+
+The Vue entry also exports `UNREFRESH_VUE_KEY` for apps that prefer explicit injection.
+
+```ts
+import { UNREFRESH_VUE_KEY } from 'unrefresh/vue'
+
+app.provide(UNREFRESH_VUE_KEY, refresh)
+```
+
 ## Options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `animation` | `'spin' \| 'pulse' \| 'orbit' \| 'magnetic' \| 'bounce' \| 'flip' \| 'none'` | `spin` | Loading indicator animation preset. `magnetic` adds a more distinctive app-style snap, orbit, and ripple motion. Use `none` when your product owns the indicator animation. |
+| `animationDuration` | `number` | `720` | Loading indicator animation duration in milliseconds. |
+| `animationIcon` | `'auto' \| 'loop' \| 'dot' \| 'orbit' \| 'magnet' \| 'arrow' \| 'diamond' \| 'spark' \| 'bolt' \| 'arc'` | `auto` | Built-in loading icon style. `auto` picks a different icon for each animation preset. |
 | `ariaLive` | `'polite' \| 'assertive' \| 'off'` | `polite` | Screen reader live-region mode for status text. |
 | `target` / `dom` | `HTMLElement \| Document` | `document.documentElement` | Element that receives touch events. |
 | `pullDownLength` | `number` | `80` | Pull distance required to trigger refresh. |
@@ -225,17 +276,47 @@ export function Feed() {
 | `onRefresh` | `(context: RefreshContext) => void \| Promise<void>` | `undefined` | Refresh callback. Use `context.signal` to cancel fetches on destroy or `cancel()`. |
 | `onError` | `(error: unknown) => void` | `undefined` | Handles rejected refresh callbacks from touch events. |
 | `onStateChange` | `(state: RefreshState) => void` | `undefined` | Receives `idle`, `pulling`, `ready`, `refreshing`, `success`, and `error` updates. |
-| `loadingImage` | `string` | built-in SVG | Custom loading image URL. |
+| `loadingImage` | `string` | built-in animation icon | Custom loading image URL. This overrides `animationIcon`. |
 | `initialText` | `string` | `下拉刷新` | Text before release threshold. |
 | `releaseText` | `string` | `释放刷新` | Text after release threshold. |
 | `loadingText` | `string` | `加载中` | Text while refreshing. |
 | `preventDefault` | `boolean` | `true` | Prevents native touch scrolling while pulling. |
+
+Every animation preset has its own pull-frame format before loading starts. During a drag, `unrefresh` updates CSS variables such as `--unrefresh-progress`, `--unrefresh-distance`, `--unrefresh-frame-rotate`, `--unrefresh-frame-scale`, `--unrefresh-frame-orbit`, `--unrefresh-frame-flip`, and `--unrefresh-frame-magnet`. The built-in CSS maps those frame variables differently for `spin`, `pulse`, `orbit`, `magnetic`, `bounce`, and `flip`, so the indicator adapts to the current pull frame instead of using one generic transform.
+
+Built-in animations also use different icon styles by default: loop, pulse dot, orbit, magnet, arrow, diamond, and spark variants. Use `animationIcon` to force a specific built-in icon, or `loadingImage` when you need a fully custom asset URL.
+
+You can also provide a custom frame animation. `frames` are discrete progress keyframes, and `onFrame` can return per-frame styles or variables for fully custom interpolation:
+
+```ts
+createRefresh({
+  animation: {
+    name: 'elastic-arc',
+    frames: [
+      { progress: 0, spinner: { opacity: 0.4, transform: 'scale(0.72)' } },
+      { progress: 0.5, spinner: { opacity: 0.8, transform: 'scale(0.96) rotate(72deg)' } },
+      { progress: 1, spinner: { opacity: 1, transform: 'scale(1.12) rotate(180deg)' } },
+    ],
+    onFrame({ frame }) {
+      return {
+        top: {
+          transform: `translateY(${(1 - frame.progress) * -8}px) scale(${1 + frame.progress * 0.1})`,
+        },
+        variables: {
+          '--brand-refresh-progress': frame.progress.toFixed(3),
+        },
+      }
+    },
+  },
+})
+```
 
 ## Resource options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `auto` | `boolean` | `false` | Starts the first load on the next microtask after creation. |
+| `cache` | `string \| object` | `undefined` | Hydrates data from local cache and writes successful loads back to storage. |
 | `initialData` | `TData` | `undefined` | Data shown before the first real load. |
 | `keepPreviousData` | `boolean` | `true` | Keeps existing data visible during reloads and failed refreshes. |
 | `load` | `(context: RefreshContext) => TData \| Promise<TData>` | required | Data loader. Use `context.signal` with `fetch` for cancellation. |
@@ -244,14 +325,18 @@ export function Feed() {
 | `onLoadError` | `(error, context) => void` | `undefined` | Runs when all retry attempts have failed. |
 | `retry` | `boolean \| number` | `0` | Retry failed loads. `true` means 2 retries. |
 | `retryDelay` | `number \| (attempt, error) => number` | exponential | Delay between retry attempts in milliseconds. |
-| `skeleton` | `boolean \| number \| object` | `{ count: 6, variant: 'default', when: 'empty' }` | Controls skeleton state during resource loading. |
+| `skeleton` | `boolean \| number \| object` | `{ animation: 'shimmer', count: 6, variant: 'default', when: 'empty' }` | Controls skeleton state during resource loading. |
 | `staleTime` | `number` | `undefined` | Marks resource state as stale after the data age reaches this duration. |
+
+Use `resource.setOptions()` to update refresh options, skeleton options, retry, stale time, and previous-data behavior at runtime. This is useful for design studios, settings panels, and product-specific tuning surfaces.
 
 When `staleTime` is set, `reload()` can reuse fresh data. Use `reload({ force: true })` for manual refresh buttons or explicit user actions that should always hit the loader.
 
-Skeleton options support `count`, `enabled`, `variant`, and `when`. Use `variant` to render page-specific skeletons such as `feed-card`, `message-row`, or `dashboard-tile` from your own UI layer. Use `when: 'empty'` for first-load skeletons only, or `when: 'loading'` when reloads with existing data should also expose skeleton state.
+Skeleton options support `animation`, `count`, `enabled`, `variant`, and `when`. Use `animation: 'shimmer' | 'pulse' | 'wave' | 'none'` to match the loading style of the current page. Use `variant` to render page-specific skeletons such as `feed-card`, `message-row`, or `dashboard-tile` from your own UI layer. Use `when: 'empty'` for first-load skeletons only, or `when: 'loading'` when reloads with existing data should also expose skeleton state.
 
-Resource state includes `data`, `error`, `status`, `isLoading`, `isStale`, `showSkeleton`, `skeletonCount`, `skeletonVariant`, `failureCount`, `updatedAt`, and the nested refresh gesture state.
+Cache options support `key`, `ttl`, and custom `storage`. When only a string is provided, it is used as the localStorage key. Cached data is ignored and removed after `ttl` expires.
+
+Resource state includes `data`, `error`, `status`, `isLoading`, `isCached`, `cacheKey`, `isStale`, `showSkeleton`, `skeletonAnimation`, `skeletonCount`, `skeletonVariant`, `failureCount`, `updatedAt`, and the nested refresh gesture state.
 
 ## Exports
 
@@ -275,10 +360,18 @@ The logo assets live in [`assets`](./assets):
 
 ## Demo
 
-The playground uses a real network request and refreshes live data:
+The playground uses a real network request, refreshes live data, and includes a parameter studio for tuning pull distance, motion timing, rebound, skeleton animation, stale time, and haptics at runtime. The animation selector also includes `Custom Arc`, which is implemented with the same `frames` and `onFrame` custom animation API.
 
 ```bash
 npm --prefix playground run dev
+```
+
+## Project Checks
+
+Run the full local check before opening a pull request or cutting a release:
+
+```bash
+npm run check
 ```
 
 ## Release
@@ -289,7 +382,7 @@ GitHub releases are tag-driven. The release workflow validates the package, buil
 npm run release
 ```
 
-The tag must match `package.json`, for example `v1.0.0` for version `1.0.0`. Publishing uses npm provenance through GitHub Actions, so the repository needs `NPM_TOKEN` in GitHub secrets.
+The tag must match `package.json`, for example `v1.2.0` for version `1.2.0`. Publishing uses npm provenance through GitHub Actions, so the repository needs `NPM_TOKEN` in GitHub secrets.
 
 Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md). GitHub's generated release notes are grouped by `.github/release.yml`.
 

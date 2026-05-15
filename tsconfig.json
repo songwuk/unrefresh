@@ -14,7 +14,10 @@
     "resolveJsonModule": true,
     "strict": true,
     "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "skipDefaultLibCheck": true,
     "skipLibCheck": true
   }

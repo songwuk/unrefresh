@@ -1,5 +1,16 @@
 import type { RefreshContainerElements } from './components/index'
 import type {
+  RefreshAnimation,
+  RefreshAnimationElementKey,
+  RefreshAnimationFrame,
+  RefreshAnimationFrameContext,
+  RefreshAnimationFrameElements,
+  RefreshAnimationFrameResult,
+  RefreshAnimationKeyframe,
+  RefreshAnimationPreset,
+  RefreshAnimationStyleMap,
+  RefreshAnimationStyleProperty,
+  RefreshCustomAnimation,
   RefreshEventListener,
   RefreshEventMap,
   RefreshEventName,
@@ -12,13 +23,15 @@ import type {
   RefreshTarget,
   UnrefreshAppLike,
 } from './types'
-import { createRefreshContainer } from './components/index'
+import { createRefreshContainer, getRefreshAnimationIcon } from './components/index'
 
 const DEFAULT_PULL_DOWN_LENGTH = 80
 const DEFAULT_RESET_DELAY = 1000
 const DEFAULT_BOUNCE_DURATION = 420
 const DEFAULT_COMPLETE_DURATION = 0
 const DEFAULT_MIN_LOADING_DURATION = 0
+const DEFAULT_ANIMATION_PRESET: RefreshAnimationPreset = 'spin'
+const DEFAULT_ANIMATION_DURATION = 720
 const HIDDEN_OFFSET = -84
 const LOADING_OFFSET = 0
 const MAX_PULL_STRETCH = 18
@@ -27,6 +40,8 @@ const RELEASE_TEXT = '释放刷新'
 const LOADING_TEXT = '加载中'
 const SUCCESS_TEXT = '刷新成功'
 const ERROR_TEXT = '刷新失败'
+
+const FRAME_ELEMENT_KEYS: RefreshAnimationElementKey[] = ['container', 'top', 'spinner', 'text']
 
 const DEFAULT_HAPTIC_PATTERNS: Record<RefreshHapticEvent, false | RefreshHapticPattern> = {
   error: [12, 30, 12],
@@ -79,6 +94,14 @@ function getLoadingImage(options: RefreshOptions) {
   return options.loadingImage || options.designLoading || options.designloading
 }
 
+function hasCustomLoadingImage(options: RefreshOptions) {
+  return !!getLoadingImage(options)
+}
+
+function isCustomAnimation(animation: RefreshAnimation | undefined): animation is RefreshCustomAnimation {
+  return !!animation && typeof animation === 'object'
+}
+
 function getTargetWindow(target?: RefreshTarget) {
   if (!isBrowser())
     return undefined
@@ -127,8 +150,10 @@ export class Refresh {
   private _inputType?: 'mouse' | 'touch'
   private _isPulling = false
   private _isRefreshing = false
-  private _listeners = new Map<RefreshEventName, Set<RefreshEventListener<any>>>()
+  private _listeners = new Map<RefreshEventName, Set<RefreshEventListener>>()
   private _lifecycleId = 0
+  private _customFrameStyles: Partial<Record<RefreshAnimationElementKey, Set<RefreshAnimationStyleProperty>>> = {}
+  private _customFrameVariables = new Set<string>()
   private _nextOffset = HIDDEN_OFFSET
   private _opts: RefreshOptions = {}
   private _readyToRefresh = false
@@ -170,12 +195,17 @@ export class Refresh {
 
     this._target = getTargetFromOptions(this._opts) || this._target || document.documentElement
     this._elements = createRefreshContainer({
+      animation: this._getAnimationName(),
+      animationDuration: this._getAnimationDuration(),
+      animationIcon: this._opts.animationIcon,
       ariaLive: this._opts.ariaLive,
       containerClassName: this._opts.containerClassName,
       loadingImage: getLoadingImage(this._opts),
       text: this._getText('initial'),
     })
     body.insertBefore(this._elements.container, body.firstChild)
+    this._setAnimation()
+    this._setFrame('idle', 0, HIDDEN_OFFSET)
 
     this._abortController = createAbortController(this._target)
     const { signal } = this._abortController
@@ -245,8 +275,8 @@ export class Refresh {
     eventName: EventName,
     listener: RefreshEventListener<EventName>,
   ) {
-    const listeners = this._listeners.get(eventName) || new Set<RefreshEventListener<any>>()
-    listeners.add(listener as RefreshEventListener<any>)
+    const listeners = this._listeners.get(eventName) || new Set<RefreshEventListener>()
+    listeners.add(listener as RefreshEventListener)
     this._listeners.set(eventName, listeners)
 
     return this
@@ -257,7 +287,7 @@ export class Refresh {
     listener: RefreshEventListener<EventName>,
   ) {
     const listeners = this._listeners.get(eventName)
-    listeners?.delete(listener as RefreshEventListener<any>)
+    listeners?.delete(listener as RefreshEventListener)
 
     if (listeners?.size === 0)
       this._listeners.delete(eventName)
@@ -362,6 +392,7 @@ export class Refresh {
 
     if (this._elements)
       this._setText(this._getText(this._getTextType()))
+    this._setAnimation()
 
     return this
   }
@@ -434,6 +465,34 @@ export class Refresh {
       : DEFAULT_BOUNCE_DURATION
   }
 
+  private _getAnimationDuration() {
+    const duration = this._opts.animationDuration
+
+    return typeof duration === 'number' && duration >= 0
+      ? duration
+      : DEFAULT_ANIMATION_DURATION
+  }
+
+  private _getAnimation(): RefreshAnimation {
+    return this._opts.animation || DEFAULT_ANIMATION_PRESET
+  }
+
+  private _getAnimationName() {
+    const animation = this._getAnimation()
+
+    return typeof animation === 'string'
+      ? animation
+      : animation.name || 'custom'
+  }
+
+  private _getCustomAnimation() {
+    const animation = this._getAnimation()
+
+    return isCustomAnimation(animation)
+      ? animation
+      : undefined
+  }
+
   private _getCompleteDuration() {
     const duration = this._opts.completeDuration
 
@@ -504,6 +563,7 @@ export class Refresh {
   private _emitState(status: RefreshStatus, distance: number, offset: number) {
     this._status = status
     this._distance = distance
+    this._setFrame(status, distance, offset)
     const state = this._createState(status, distance, offset)
     this._opts.onStateChange?.(state)
     this._emit('statechange', state)
@@ -515,7 +575,9 @@ export class Refresh {
     eventName: EventName,
     payload: RefreshEventMap[EventName],
   ) {
-    this._listeners.get(eventName)?.forEach(listener => listener(payload))
+    this._listeners.get(eventName)?.forEach((listener) => {
+      (listener as RefreshEventListener<EventName>)(payload)
+    })
   }
 
   private _isBounceEnabled() {
@@ -673,19 +735,214 @@ export class Refresh {
     this._setResult()
     this._setText(this._getText('initial'))
     this._setOffset(HIDDEN_OFFSET, options.immediate)
-    this._rotate(0)
     this._elements?.top.classList.remove('load-init')
     this._elements?.top.classList.remove('load-start')
     this._emitState('idle', 0, HIDDEN_OFFSET)
   }
 
   private _rotate(rotate: number) {
-    if (this._elements)
-      this._elements.spinner.style.transform = `rotate(${rotate}deg)`
+    this._elements?.container.style.setProperty('--unrefresh-frame-rotate', `${Math.round(rotate)}deg`)
   }
 
   private _setDragging(isDragging: boolean) {
     this._elements?.container.classList.toggle('refresh-container--dragging', isDragging)
+  }
+
+  private _setAnimation() {
+    if (!this._elements)
+      return
+
+    this._elements.container.dataset.animation = this._getAnimationName()
+    this._elements.container.dataset.icon = this._opts.animationIcon || 'auto'
+    this._elements.container.style.setProperty('--unrefresh-animation-duration', `${this._getAnimationDuration()}ms`)
+
+    if (!hasCustomLoadingImage(this._opts))
+      this._elements.spinner.src = getRefreshAnimationIcon(this._getAnimationName(), this._opts.animationIcon)
+
+    this._setFrame(this._status, this._distance, this._nextOffset)
+  }
+
+  private _getFrameElement(key: RefreshAnimationElementKey) {
+    if (!this._elements)
+      return undefined
+
+    return this._elements[key]
+  }
+
+  private _clearCustomFrameStyles() {
+    if (!this._elements)
+      return
+
+    for (const key of FRAME_ELEMENT_KEYS) {
+      const element = this._getFrameElement(key)
+      const properties = this._customFrameStyles[key]
+
+      if (!element || !properties)
+        continue
+
+      properties.forEach(property => element.style.removeProperty(property))
+      properties.clear()
+    }
+
+    this._customFrameVariables.forEach(variable => this._elements?.container.style.removeProperty(variable))
+    this._customFrameVariables.clear()
+  }
+
+  private _formatFrameStyleValue(value: number | string) {
+    return typeof value === 'number'
+      ? String(value)
+      : value
+  }
+
+  private _applyFrameStyle(
+    key: RefreshAnimationElementKey,
+    style: RefreshAnimationStyleMap | undefined,
+  ) {
+    if (!style)
+      return
+
+    const element = this._getFrameElement(key)
+    if (!element)
+      return
+
+    const properties = this._customFrameStyles[key] || new Set<RefreshAnimationStyleProperty>()
+    this._customFrameStyles[key] = properties
+
+    for (const [property, value] of Object.entries(style) as Array<[RefreshAnimationStyleProperty, number | string]>) {
+      element.style.setProperty(property, this._formatFrameStyleValue(value))
+      properties.add(property)
+    }
+  }
+
+  private _applyAnimationFrameResult(result: RefreshAnimationFrameResult | undefined) {
+    if (!result || !this._elements)
+      return
+
+    this._applyFrameStyle('container', result.container)
+    this._applyFrameStyle('top', result.top)
+    this._applyFrameStyle('spinner', result.spinner)
+    this._applyFrameStyle('text', result.text)
+
+    if (!result.variables)
+      return
+
+    for (const [name, value] of Object.entries(result.variables)) {
+      this._elements.container.style.setProperty(name, this._formatFrameStyleValue(value))
+      this._customFrameVariables.add(name)
+    }
+  }
+
+  private _resolveAnimationKeyframe(
+    frames: readonly RefreshAnimationKeyframe[] | undefined,
+    progress: number,
+  ) {
+    if (!frames?.length)
+      return undefined
+
+    const sortedFrames = [...frames].sort((a, b) => a.progress - b.progress)
+    let selectedFrame = sortedFrames[0]
+
+    for (const frame of sortedFrames) {
+      if (frame.progress > progress)
+        break
+
+      selectedFrame = frame
+    }
+
+    return selectedFrame
+  }
+
+  private _applyCustomAnimationFrame(frame: RefreshAnimationFrame) {
+    const customAnimation = this._getCustomAnimation()
+
+    if (!customAnimation || !this._elements) {
+      this._clearCustomFrameStyles()
+      return
+    }
+
+    this._clearCustomFrameStyles()
+    this._applyAnimationFrameResult(this._resolveAnimationKeyframe(customAnimation.frames, frame.progress))
+
+    if (!customAnimation.onFrame)
+      return
+
+    const elements: RefreshAnimationFrameElements = this._elements
+    const context: RefreshAnimationFrameContext = {
+      elements,
+      frame,
+      setVariable: (name, value) => {
+        this._elements?.container.style.setProperty(name, this._formatFrameStyleValue(value))
+        this._customFrameVariables.add(name)
+      },
+    }
+
+    try {
+      const result = customAnimation.onFrame(context)
+
+      if (result)
+        this._applyAnimationFrameResult(result)
+    }
+    catch (error) {
+      this._handleError(error)
+    }
+  }
+
+  private _setFrame(status: RefreshStatus, distance: number, offset: number) {
+    if (!this._elements)
+      return
+
+    const pullDownLength = this._getPullDownLength()
+    const progress = Math.min(Math.max(distance / this._getPullDownLength(), 0), 1)
+    const overflow = Math.max(distance - pullDownLength, 0)
+    const overflowProgress = Math.min(overflow / pullDownLength, 1)
+    const easedProgress = 1 - (1 - progress) ** 2
+    const frameRotate = progress * 360 + overflowProgress * 120
+    const frameCounterRotate = frameRotate * -0.35
+    const frameScale = 1 + easedProgress * 0.12 + overflowProgress * 0.04
+    const frameY = -(easedProgress * 8) + overflowProgress * 3
+    const frameOrbit = 11 + easedProgress * 18 + overflowProgress * 4
+    const frameFlip = progress * 180 + overflowProgress * 90
+    const frameMagnet = Math.min(easedProgress + overflowProgress * 0.35, 1)
+    const frameOpacity = 0.48 + progress * 0.52
+    const framePulseScale = 0.82 + progress * 0.18
+    const frameBorderAlpha = 0.08 + progress * 0.18
+    const frameGlow = frameMagnet * 22
+    const frameRingInset = -4 - progress * 7
+    const frameRingScale = 0.78 + frameMagnet * 0.34
+    const frameMagnetScale = 0.88 + frameMagnet * 0.18
+    const frameShadow = 28 + progress * 8
+
+    this._elements.container.dataset.status = status
+    this._elements.container.style.setProperty('--unrefresh-progress', progress.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-distance', `${Math.round(distance)}px`)
+    this._elements.container.style.setProperty('--unrefresh-offset', `${Math.round(offset)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-border-alpha', frameBorderAlpha.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-counter-rotate', `${Math.round(frameCounterRotate)}deg`)
+    this._elements.container.style.setProperty('--unrefresh-frame-glow', `${frameGlow.toFixed(1)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-magnet-scale', frameMagnetScale.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-rotate', `${Math.round(frameRotate)}deg`)
+    this._elements.container.style.setProperty('--unrefresh-frame-opacity', frameOpacity.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-scale', frameScale.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-pulse-scale', framePulseScale.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-ring-inset', `${frameRingInset.toFixed(1)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-ring-scale', frameRingScale.toFixed(3))
+    this._elements.container.style.setProperty('--unrefresh-frame-shadow', `${frameShadow.toFixed(1)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-y', `${frameY.toFixed(1)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-orbit', `${frameOrbit.toFixed(1)}px`)
+    this._elements.container.style.setProperty('--unrefresh-frame-flip', `${Math.round(frameFlip)}deg`)
+    this._elements.container.style.setProperty('--unrefresh-frame-magnet', frameMagnet.toFixed(3))
+
+    this._applyCustomAnimationFrame({
+      distance,
+      offset,
+      overflow,
+      overflowProgress,
+      progress,
+      pullDownLength,
+      ready: this._readyToRefresh,
+      refreshing: this._isRefreshing,
+      status,
+    })
   }
 
   private _setLoading(isLoading: boolean) {
@@ -796,6 +1053,19 @@ export type {
   RefreshEventMap,
   RefreshEventName,
   RefreshAriaLive,
+  RefreshAnimation,
+  RefreshAnimationElementKey,
+  RefreshAnimationFrame,
+  RefreshAnimationFrameContext,
+  RefreshAnimationFrameElements,
+  RefreshAnimationFrameHandler,
+  RefreshAnimationFrameResult,
+  RefreshAnimationIconPreset,
+  RefreshAnimationKeyframe,
+  RefreshAnimationPreset,
+  RefreshAnimationStyleMap,
+  RefreshAnimationStyleProperty,
+  RefreshCustomAnimation,
   RefreshContext,
   RefreshController,
   RefreshHook,
@@ -804,6 +1074,9 @@ export type {
   RefreshHaptics,
   RefreshOptions,
   RefreshResource,
+  RefreshResourceCache,
+  RefreshResourceCacheOptions,
+  RefreshResourceCacheStorage,
   RefreshResourceListener,
   RefreshResourceLoader,
   RefreshResourceOptions,
@@ -811,7 +1084,9 @@ export type {
   RefreshResourceRetryDelay,
   RefreshResourceState,
   RefreshResourceStatus,
+  RefreshResourceUpdateOptions,
   RefreshSkeleton,
+  RefreshSkeletonAnimation,
   RefreshSkeletonOptions,
   RefreshSkeletonVariant,
   RefreshSkeletonWhen,
@@ -820,6 +1095,7 @@ export type {
   RefreshStatus,
   RefreshTarget,
   UnrefreshAppLike,
+  UseRefreshApi,
   useApi,
 } from './types'
 

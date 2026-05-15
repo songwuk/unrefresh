@@ -108,6 +108,142 @@ describe('refresh dom gestures', () => {
     refresh.destroy()
   })
 
+  it('applies animation presets and duration at runtime', () => {
+    const refresh = new Refresh({
+      animation: 'orbit',
+      animationDuration: 900,
+      target: document,
+    }).init()
+
+    const container = document.querySelector<HTMLElement>('.refresh-container')
+
+    expect(container?.dataset.animation).toBe('orbit')
+    expect(container?.dataset.icon).toBe('auto')
+    expect(container?.style.getPropertyValue('--unrefresh-animation-duration')).toBe('900ms')
+    const orbitIcon = document.querySelector<HTMLImageElement>('.spinner')?.src
+
+    refresh.setOptions({
+      animation: 'magnetic',
+      animationDuration: 480,
+    })
+
+    expect(container?.dataset.animation).toBe('magnetic')
+    expect(container?.style.getPropertyValue('--unrefresh-animation-duration')).toBe('480ms')
+    expect(document.querySelector<HTMLImageElement>('.spinner')?.src).not.toBe(orbitIcon)
+
+    refresh.setOptions({ animationIcon: 'diamond' })
+
+    expect(container?.dataset.icon).toBe('diamond')
+    expect(document.querySelector<HTMLImageElement>('.spinner')?.src).toContain('data:image/svg+xml')
+
+    refresh.destroy()
+  })
+
+  it('keeps custom loading images ahead of built-in animation icons', () => {
+    const refresh = new Refresh({
+      animation: 'orbit',
+      loadingImage: '/custom.svg',
+      target: document,
+    }).init()
+
+    const spinner = document.querySelector<HTMLImageElement>('.spinner')
+
+    expect(spinner?.getAttribute('src')).toBe('/custom.svg')
+
+    refresh.setOptions({
+      animation: 'magnetic',
+      animationIcon: 'magnet',
+    })
+
+    expect(spinner?.getAttribute('src')).toBe('/custom.svg')
+
+    refresh.destroy()
+  })
+
+  it('maps pull progress to frame variables for each animation format', () => {
+    const presets = ['spin', 'pulse', 'orbit', 'magnetic', 'bounce', 'flip', 'none'] as const
+
+    for (const animation of presets) {
+      const refresh = new Refresh({
+        animation,
+        pullDownLength: 80,
+        target: document,
+      }).init()
+
+      document.dispatchEvent(createTouchEvent('touchstart', 10))
+      document.dispatchEvent(createTouchEvent('touchmove', 90))
+
+      const container = document.querySelector<HTMLElement>('.refresh-container')!
+
+      expect(container.dataset.animation).toBe(animation)
+      expect(container.dataset.status).toBe('ready')
+      expect(container.style.getPropertyValue('--unrefresh-progress')).toBe('1.000')
+      expect(container.style.getPropertyValue('--unrefresh-distance')).toBe('80px')
+      expect(container.style.getPropertyValue('--unrefresh-frame-rotate')).toBe('360deg')
+      expect(container.style.getPropertyValue('--unrefresh-frame-scale')).not.toBe('')
+      expect(container.style.getPropertyValue('--unrefresh-frame-orbit')).not.toBe('')
+      expect(container.style.getPropertyValue('--unrefresh-frame-flip')).toBe('180deg')
+      expect(container.style.getPropertyValue('--unrefresh-frame-magnet')).toBe('1.000')
+
+      refresh.destroy()
+    }
+  })
+
+  it('supports custom frame-based animation definitions', () => {
+    const onFrame = vi.fn(({ frame }) => ({
+      spinner: {
+        transform: `scale(${frame.progress.toFixed(2)}) rotate(${Math.round(frame.progress * 120)}deg)`,
+      },
+      variables: {
+        '--custom-frame-progress': frame.progress.toFixed(2),
+      },
+    }))
+    const refresh = new Refresh({
+      animation: {
+        frames: [
+          {
+            progress: 0,
+            top: { opacity: 0.4 },
+          },
+          {
+            progress: 0.5,
+            top: { opacity: 0.7 },
+          },
+          {
+            progress: 1,
+            top: { opacity: 1 },
+          },
+        ],
+        name: 'elastic-arc',
+        onFrame,
+      },
+      pullDownLength: 80,
+      target: document,
+    }).init()
+
+    document.dispatchEvent(createTouchEvent('touchstart', 10))
+    document.dispatchEvent(createTouchEvent('touchmove', 50))
+
+    const container = document.querySelector<HTMLElement>('.refresh-container')!
+    const spinner = document.querySelector<HTMLElement>('.spinner')!
+    const top = document.querySelector<HTMLElement>('.refresh-top')!
+
+    expect(container.dataset.animation).toBe('elastic-arc')
+    expect(onFrame).toHaveBeenCalled()
+    expect(container.style.getPropertyValue('--custom-frame-progress')).toBe('0.50')
+    expect(spinner.style.getPropertyValue('transform')).toBe('scale(0.50) rotate(60deg)')
+    expect(top.style.getPropertyValue('opacity')).toBe('0.7')
+
+    refresh.setOptions({ animation: 'spin' })
+
+    expect(container.dataset.animation).toBe('spin')
+    expect(container.style.getPropertyValue('--custom-frame-progress')).toBe('')
+    expect(spinner.style.getPropertyValue('transform')).toBe('')
+    expect(top.style.getPropertyValue('opacity')).toBe('')
+
+    refresh.destroy()
+  })
+
   it('triggers refresh after pulling past the threshold', async () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined)
     const refresh = new Refresh({

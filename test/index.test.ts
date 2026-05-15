@@ -2,7 +2,21 @@ import { describe, expect, it, vi } from 'vitest'
 import Refresh, { createRefresh, createRefreshResource, install, UNREFRESH_KEY, UnrefreshPlugin } from '../src'
 import type { RefreshContext, RefreshResourceState } from '../src'
 import * as vanilla from '../src/vanilla'
-import UnrefreshVuePlugin, { createUnrefreshVuePlugin } from '../src/vue'
+import UnrefreshVuePlugin, { createUnrefreshVuePlugin, UNREFRESH_VUE_KEY } from '../src/vue'
+
+function createMemoryStorage(initialValues: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initialValues))
+
+  return {
+    getItem: vi.fn((key: string) => values.get(key) || null),
+    removeItem: vi.fn((key: string) => {
+      values.delete(key)
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      values.set(key, value)
+    }),
+  }
+}
 
 describe('should', () => {
   it('exports constructor and plugin helpers', () => {
@@ -18,6 +32,7 @@ describe('should', () => {
     expect(vanilla.createRefresh).toBe(createRefresh)
     expect(typeof UnrefreshVuePlugin.install).toBe('function')
     expect(typeof createUnrefreshVuePlugin().install).toBe('function')
+    expect(UNREFRESH_VUE_KEY).toBe(UNREFRESH_KEY)
   })
 
   it('can create plugin instances without a browser document', () => {
@@ -103,6 +118,76 @@ describe('should', () => {
     resource.destroy()
   })
 
+  it('hydrates refresh resources from cache', () => {
+    const storage = createMemoryStorage({
+      feed: JSON.stringify({
+        data: ['cached'],
+        updatedAt: Date.now(),
+      }),
+    })
+    const resource = createRefreshResource<string[]>({
+      cache: {
+        key: 'feed',
+        storage,
+        ttl: 1000,
+      },
+      load: vi.fn().mockResolvedValue(['fresh']),
+    })
+
+    expect(resource.getState().data).toEqual(['cached'])
+    expect(resource.getState().isCached).toBe(true)
+    expect(resource.getState().cacheKey).toBe('feed')
+    expect(resource.getState().status).toBe('success')
+
+    resource.destroy()
+  })
+
+  it('ignores expired cached refresh resources', () => {
+    const storage = createMemoryStorage({
+      feed: JSON.stringify({
+        data: ['stale'],
+        updatedAt: Date.now() - 2000,
+      }),
+    })
+    const resource = createRefreshResource<string[]>({
+      cache: {
+        key: 'feed',
+        storage,
+        ttl: 1000,
+      },
+      load: vi.fn().mockResolvedValue(['fresh']),
+    })
+
+    expect(resource.getState().data).toBeUndefined()
+    expect(resource.getState().isCached).toBe(false)
+    expect(storage.removeItem).toHaveBeenCalledWith('feed')
+
+    resource.destroy()
+  })
+
+  it('writes and clears refresh resource cache', async () => {
+    const storage = createMemoryStorage()
+    const resource = createRefreshResource<string[]>({
+      cache: {
+        key: 'feed',
+        storage,
+      },
+      load: vi.fn().mockResolvedValue(['fresh']),
+    })
+
+    await resource.reload()
+
+    expect(storage.setItem).toHaveBeenCalledWith('feed', expect.any(String))
+    expect(JSON.parse(storage.setItem.mock.calls[0][1]).data).toEqual(['fresh'])
+    expect(resource.getState().isCached).toBe(false)
+
+    expect(resource.clearCache()).toBe(resource)
+    expect(storage.removeItem).toHaveBeenCalledWith('feed')
+    expect(resource.getState().isCached).toBe(false)
+
+    resource.destroy()
+  })
+
   it('can auto load refresh resources', async () => {
     const load = vi.fn().mockResolvedValue(['auto'])
     const resource = createRefreshResource<string[]>({
@@ -136,6 +221,7 @@ describe('should', () => {
 
     expect(resource.getState().showSkeleton).toBe(true)
     expect(resource.getState().skeletonCount).toBe(4)
+    expect(resource.getState().skeletonAnimation).toBe('shimmer')
     expect(resource.getState().skeletonVariant).toBe('default')
 
     resolveLoad?.(['fresh'])
@@ -179,6 +265,7 @@ describe('should', () => {
         })
       },
       skeleton: {
+        animation: 'wave',
         count: 3,
         variant: 'feed-card',
         when: 'loading',
@@ -190,6 +277,7 @@ describe('should', () => {
 
     expect(resource.getState().data).toEqual(['cached'])
     expect(resource.getState().showSkeleton).toBe(true)
+    expect(resource.getState().skeletonAnimation).toBe('wave')
     expect(resource.getState().skeletonCount).toBe(3)
     expect(resource.getState().skeletonVariant).toBe('feed-card')
 
@@ -197,6 +285,52 @@ describe('should', () => {
     await reload
 
     expect(resource.getState().showSkeleton).toBe(false)
+
+    resource.destroy()
+  })
+
+  it('updates refresh resource parameters at runtime', async () => {
+    let resolveLoad: ((value: string[]) => void) | undefined
+    const resource = createRefreshResource<string[]>({
+      animation: 'spin',
+      animationDuration: 720,
+      initialData: ['cached'],
+      load() {
+        return new Promise<string[]>((resolve) => {
+          resolveLoad = resolve
+        })
+      },
+      skeleton: {
+        count: 1,
+        when: 'empty',
+      },
+      staleTime: Infinity,
+    })
+
+    expect(resource.setOptions({
+      animation: 'magnetic',
+      animationDuration: 640,
+      skeleton: {
+        animation: 'pulse',
+        count: 2,
+        variant: 'feed-card',
+        when: 'loading',
+      },
+      staleTime: 0,
+    })).toBe(resource)
+
+    expect(resource.getState().isStale).toBe(true)
+
+    const reload = resource.reload({ force: true })
+    await Promise.resolve()
+
+    expect(resource.getState().showSkeleton).toBe(true)
+    expect(resource.getState().skeletonAnimation).toBe('pulse')
+    expect(resource.getState().skeletonCount).toBe(2)
+    expect(resource.getState().skeletonVariant).toBe('feed-card')
+
+    resolveLoad?.(['fresh'])
+    await reload
 
     resource.destroy()
   })
