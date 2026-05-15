@@ -326,6 +326,14 @@ npm run release
 
 tag 必须和 `package.json` 版本一致，例如版本是 `1.2.0` 时 tag 必须是 `v1.2.0`。npm 发布启用了 GitHub Actions provenance，需要在 GitHub Secrets 中配置 `NPM_TOKEN`。
 
+如果要在本地手动发布 npm，使用：
+
+```bash
+npm publish --access public
+```
+
+provenance 只在 GitHub Actions release workflow 中启用。本地终端没有受支持的 provenance provider，所以 `npm publish --provenance` 可能会报 `Automatic provenance generation not supported for provider: null`。
+
 发布日志维护在 [`CHANGELOG.md`](./CHANGELOG.md)，GitHub 自动生成 Release Notes 的分组规则在 `.github/release.yml`。
 
 ## License

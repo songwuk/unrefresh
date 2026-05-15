@@ -384,6 +384,14 @@ npm run release
 
 The tag must match `package.json`, for example `v1.2.0` for version `1.2.0`. Publishing uses npm provenance through GitHub Actions, so the repository needs `NPM_TOKEN` in GitHub secrets.
 
+For a manual local npm publish, use:
+
+```bash
+npm publish --access public
+```
+
+Provenance is intentionally enabled only in the GitHub Actions release workflow. Local terminals do not provide a supported provenance provider, so `npm publish --provenance` can fail with `Automatic provenance generation not supported for provider: null`.
+
 Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md). GitHub's generated release notes are grouped by `.github/release.yml`.
 
 ## License
