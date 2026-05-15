@@ -58,4 +58,32 @@ export function useUnrefresh(
 export const useRefresh = useUnrefresh
 
 export default useUnrefresh
-export type { Refresh, RefreshOptions, RefreshTarget }
+export type { Refresh } from './index'
+export type {
+  RefreshEventListener,
+  RefreshEventMap,
+  RefreshEventName,
+  RefreshAriaLive,
+  RefreshContext,
+  RefreshController,
+  RefreshHapticEvent,
+  RefreshHapticPattern,
+  RefreshHaptics,
+  RefreshOptions,
+  RefreshResource,
+  RefreshResourceListener,
+  RefreshResourceLoader,
+  RefreshResourceOptions,
+  RefreshResourceReloadOptions,
+  RefreshResourceRetryDelay,
+  RefreshResourceState,
+  RefreshResourceStatus,
+  RefreshSkeleton,
+  RefreshSkeletonOptions,
+  RefreshSkeletonVariant,
+  RefreshSkeletonWhen,
+  RefreshState,
+  RefreshStateChangeHook,
+  RefreshStatus,
+  RefreshTarget,
+} from './types'

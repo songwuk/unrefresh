@@ -26,6 +26,22 @@
   transition-duration: var(--unrefresh-bounce-duration, 420ms);
   transition-timing-function: cubic-bezier(0.22, 1.42, 0.36, 1);
 }
+.refresh-container--success .refresh-top {
+  border-color: rgba(22, 163, 74, 0.16);
+  background: rgba(240, 253, 244, 0.96);
+  box-shadow: 0 10px 28px rgba(22, 163, 74, 0.14);
+}
+.refresh-container--success .refresh-text {
+  color: #166534;
+}
+.refresh-container--error .refresh-top {
+  border-color: rgba(220, 38, 38, 0.16);
+  background: rgba(254, 242, 242, 0.96);
+  box-shadow: 0 10px 28px rgba(220, 38, 38, 0.14);
+}
+.refresh-container--error .refresh-text {
+  color: #991b1b;
+}
 .refresh-top {
   width: 44px;
   height: 44px;

@@ -1,7 +1,7 @@
 {
   "name": "unrefresh",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "packageManager": "npm@11.6.2",
   "description": "A lightweight pull-to-refresh plugin for mobile web pages.",
   "author": "Song wuk <1017301325@qq.com>",
@@ -32,6 +32,11 @@
       "types": "./dist/vanilla.d.ts",
       "import": "./dist/vanilla.mjs",
       "require": "./dist/vanilla.cjs"
+    },
+    "./resource": {
+      "types": "./dist/resource.d.ts",
+      "import": "./dist/resource.mjs",
+      "require": "./dist/resource.cjs"
     },
     "./vue": {
       "types": "./dist/vue.d.ts",
@@ -66,7 +71,8 @@
   },
   "files": [
     "assets",
-    "dist"
+    "dist",
+    "README.zh-CN.md"
   ],
   "scripts": {
     "build": "unbuild",
@@ -74,7 +80,7 @@
     "play": "vite playground",
     "lint": "eslint .",
     "prepublishOnly": "npm run build",
-    "release": "bumpp && npm publish",
+    "release": "bumpp --commit --tag --push",
     "start": "esno src/index.ts",
     "test": "vitest",
     "typecheck": "tsc --noEmit"

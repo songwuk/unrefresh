@@ -20,4 +20,30 @@ export function createUnrefreshVuePlugin(defaultOptions: RefreshOptions = {}): U
 export const UnrefreshVuePlugin = createUnrefreshVuePlugin()
 
 export default UnrefreshVuePlugin
-export type { RefreshOptions }
+export type {
+  RefreshEventListener,
+  RefreshEventMap,
+  RefreshEventName,
+  RefreshAriaLive,
+  RefreshContext,
+  RefreshController,
+  RefreshHapticEvent,
+  RefreshHapticPattern,
+  RefreshHaptics,
+  RefreshOptions,
+  RefreshResource,
+  RefreshResourceListener,
+  RefreshResourceLoader,
+  RefreshResourceOptions,
+  RefreshResourceReloadOptions,
+  RefreshResourceRetryDelay,
+  RefreshResourceState,
+  RefreshResourceStatus,
+  RefreshSkeleton,
+  RefreshSkeletonOptions,
+  RefreshSkeletonVariant,
+  RefreshSkeletonWhen,
+  RefreshState,
+  RefreshStateChangeHook,
+  RefreshStatus,
+} from './types'

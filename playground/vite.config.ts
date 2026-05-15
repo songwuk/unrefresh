@@ -13,6 +13,10 @@ export default defineConfig({
         replacement: resolve(__dirname, '../src/vanilla.ts'),
       },
       {
+        find: 'unrefresh/resource',
+        replacement: resolve(__dirname, '../src/resource.ts'),
+      },
+      {
         find: 'unrefresh',
         replacement: resolve(__dirname, '../src/index.ts'),
       },
